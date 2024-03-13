@@ -1,0 +1,22 @@
+# common
+*.pyc
+*.csv
+*.json
+*.log
+*.cfg
+*.db
+
+# dir
+Ignore_to_Push/
+__pycache__/
+
+# airflow 
+Airflow/logs/
+airflow-webserver.pid
+airflow.cfg
+webserver_config.py
+Airflow/dags/practice.py
+
+# Backend
+myapi/migrations
+alembic.ini
