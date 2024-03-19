@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from domain.get_data import api_data
+from domain.login_data import login_data
 from domain.question_data import question_data
 
 app = FastAPI()
@@ -24,4 +25,5 @@ def hello():
     return '안녕하세요?'
 
 app.include_router(api_data.router)
+app.include_router(login_data.router)
 app.include_router(question_data.router)

@@ -11,6 +11,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+import pymysql
+
 import re
 
 from pytz import timezone
@@ -241,12 +243,44 @@ def get_citation(list1, api_key) :
 
     r = requests.post(
         'https://api.semanticscholar.org/graph/v1/paper/batch',
-        params={'fields':'citationCount,referenceCount,title'},
+        params={'fields':'citationCount,referenceCount,citations.publicationDate,year'},
         headers = {'x-api-key':api_key},
         json={"ids": list1}
     )
 
     return r.json()
+
+def get_citation_graph(data) : 
+    temp = {}
+
+    if data['citations'] :    
+
+        for citation in data['citations'] : 
+
+            if citation['publicationDate'] : 
+                citation_year_month = citation['publicationDate'][:7]
+                citation_week = str((int(citation['publicationDate'][8:])//7)+1)
+                citation_time = citation_year_month + '-' + citation_week
+
+                if citation_time not in temp : 
+                    temp[citation_time] = 1
+                else : 
+                    temp[citation_time] += 1
+    
+        temp = dict(sorted(temp.items()))
+
+        time_values = list(temp.values())
+        time_values_cumsum = np.cumsum(time_values)
+        
+        for a, b in zip(temp.keys(), time_values_cumsum) : 
+            temp[a] = str(b)
+
+    result = json.dumps(temp)
+
+    return result
+
+def str_change(str1) : 
+    return f'"{str1}"'
 
 ################################
 def get_CSV(target_date1) : 
@@ -258,12 +292,11 @@ def get_CSV(target_date1) :
     dataframe = {
         'id' : [], 
         'title': [],
-        'year': [],
+        'updated_year': [],
         'abstract': [],
         'categories' : [],
         'journals' : [],
         'author1' : [],
-    #   'keyword' : [],
     }
 
     data = get_data()
@@ -286,7 +319,7 @@ def get_CSV(target_date1) :
             if date == target_date :
                 dataframe['id'].append(paper['id'])
                 dataframe['title'].append(title) 
-                dataframe['year'].append(int(date[:4])) 
+                dataframe['updated_year'].append(int(date[:4])) 
                 dataframe['abstract'].append(paper['abstract'])
                 dataframe['categories'].append(category_change(category)) 
                 dataframe['journals'].append(journal)
@@ -295,13 +328,14 @@ def get_CSV(target_date1) :
         except: pass
 
     df = pd.DataFrame(dataframe)
-    print(df.head())
+    print(df.columns)
     print(len(df))
 
     del dataframe
     
     df_name = f'/home/dohyun/Final_P/csv_files/databases_{target_date}.csv'
     df.to_csv(df_name, header = True, index = False )
+    print(df_name)
 
     del df
 
@@ -318,12 +352,13 @@ def get_keyword(target_date1) :
 
     df_name = f'/home/dohyun/Final_P/csv_files/databases_{target_date}.csv'
     df = pd.read_csv(df_name)
+    print(df_name)
 
     df['keyword'] = keyword_change(df['abstract']) 
     df['keyword'] = df['keyword'].apply(keyword_json)
 
     df = df.drop(['abstract'], axis = 1)
-    print(df.head())
+    print(df.columns)
     print(len(df))
 
     df.to_csv(df_name, header = True, index = False )
@@ -344,6 +379,7 @@ def get_citation_reference(target_date1, semantic_api_key) :
     index_list = [] # citationCount X 인 index => drop
 
     df = pd.read_csv(df_name)
+    print(df_name)
 
     for i in range(0, len(df), 500) : # api => 1초에 1번 request, 1번에 500개 처리 
         df1 = df[i: i+500]
@@ -352,16 +388,32 @@ def get_citation_reference(target_date1, semantic_api_key) :
         df1_id_result = get_citation(df1_id_list, semantic_api_key)
 
         for j, data in enumerate(df1_id_result) : 
-            if data: 
+
+            if data : 
+                result = get_citation_graph(data)
+
                 df.loc[i+j, 'citation_count'] = int(data['citationCount'])
                 df.loc[i+j, 'reference_count'] = int(data['referenceCount'])
+                df.loc[i+j, 'published_year'] = int(data['year'])
+                df.loc[i+j, 'citation_graph'] = result
+
             else : 
                 index_list.append(i+j)
 
-        print(f'Wait! {i}th data Done!')
+        print(f'Wait! {i+500}th data Done!')
         os.system('sleep 3') # 강제로 3초 휴식 
 
     df = df.drop(index_list)
+    df = df.dropna(subset=['citation_count'], how='any', axis=0)
+    df = df.dropna(subset=['reference_count'], how='any', axis=0)
+    df = df.dropna(subset=['published_year'], how='any', axis=0)
+    len_of_graph = len(df[df['citation_graph'] != '{}'])
+    len_of_df = len(df)
+
+    print(df.columns)
+
+    print(f'Length of DF : {len_of_df}')
+    print(f'length of Graph : {len_of_graph}')
 
     df.to_csv(df_name, header = True, index = False )
 
@@ -380,14 +432,59 @@ def import_dataset(target_date1, sql_user, sql_password, sql_port) :
     engine = create_engine(f'mysql+pymysql://{sql_user}:{sql_password}@localhost:{sql_port}/final_project')
     conn = engine.connect()
 
+    db = pymysql.connect(
+        host = 'localhost',  # DATABASE_HOST
+        port = int(sql_port),
+        user = sql_user,  # DATABASE_USERNAME
+        passwd = sql_password,  # DATABASE_PASSWORD
+        db = 'final_project',  # DATABASE_NAME
+        charset = 'utf8'
+    )
+
+    table_name = 'PaperInfo_practice'
+
+    table_sql = f'SELECT id FROM {table_name};'
+    table_id = pd.read_sql(table_sql, db)
+    
+    cursor = db.cursor() # db 연결 후 cursor 객체를 통한 상호작용 
+
     file_path = f'/home/dohyun/Final_P/csv_files/databases_{target_date}.csv'
     data = pd.read_csv(file_path)
-    table_name = 'PaperInfo_mini'
+    print(file_path)
+    
+    data.drop_duplicates(inplace = True)
+    data = data.dropna(subset=['citation_count'], how='any', axis=0)
+    data = data.dropna(subset=['reference_count'], how='any', axis=0)
+    data = data.dropna(subset=['published_year'], how='any', axis=0)
+
+    data_id = pd.DataFrame(data['id'])
+
+    temp_id = pd.concat([table_id, data_id])
+
+    if temp_id.duplicated().any():
+        show_time('Duplicated Database Start!!!')
+        print(temp_id[temp_id.duplicated()])
+
+        duplicated_id_df = pd.DataFrame(temp_id[temp_id.duplicated()])
+        duplicated_id_df['id'] = duplicated_id_df['id'].apply(str_change)
+        duplicated_id_list = ','.join(duplicated_id_df['id'])
+
+        duplicated_sql = f'Delete FROM {table_name} where id in ({duplicated_id_list})'
+        cursor.execute(duplicated_sql)
+
+        db.commit()
+        
+        show_time('Duplicated Database Done!!!')
+
 
     data.to_sql(table_name, con = conn, if_exists='append', index=False)
-
+    
     del data
-    #os.remove(file_path)
+    
+    db.commit()
+
+    conn.close()
+    db.close()
 
     show_time('IMPORT DONE!!!')
 ################################

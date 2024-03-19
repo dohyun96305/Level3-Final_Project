@@ -5,6 +5,7 @@
 *.log
 *.cfg
 *.db
+*.out
 
 # dir
 Ignore_to_Push/

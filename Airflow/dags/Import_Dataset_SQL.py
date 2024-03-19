@@ -27,12 +27,13 @@ sql_port = Variable.get("sql_port")
 with DAG(
     dag_id = 'Import_Dataset_SQL',
     description = 'Import SQL with Target_date',
-    start_date = datetime(2024, 2, 1),
+    start_date = datetime(2022, 5, 1),
+    end_date = datetime(2022, 12, 1),
     schedule_interval = '@monthly',
     default_args = default_args,
     tags = ['my_dags'],
 ) as dag :
-    
+
     t1 = BashOperator(
         task_id = 'Get_Json',
         bash_command = """
@@ -42,14 +43,13 @@ with DAG(
         """,
 
     )
-
     t2 = PythonOperator(
         task_id = 'Get_Csv',
         python_callable = get_CSV,
         op_args = ['{{execution_date}}'],
 
     )
-    
+
     t3 = PythonOperator(
         task_id = 'Get_Keyword',
         python_callable = get_keyword,
