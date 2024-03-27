@@ -31,8 +31,7 @@ sql_port = Variable.get("sql_port")
 with DAG(
     dag_id = 'Import_Dataset_SQL',
     description = 'Import SQL with Target_date',
-    start_date = datetime(2020, 1, 1),
-    end_date = datetime(2020, 1, 15),
+    start_date = datetime(2010, 1, 1),
     schedule_interval = '@monthly',
     default_args = default_args,
     tags = ['my_dags'],

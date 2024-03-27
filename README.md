@@ -22,22 +22,18 @@
     * 각 Paper의 피인용 횟수 및 증가 시점 수집
         * 각 논문을 피인용한 Paper의 Published_date를 확인해 Paper의 피인용 시점 확인
 
-ㄴ DB (MySQL)
--
-
-* MySQL DB 및 Table를 활용
-    - 사용자의 Login Data, Paper Metadata, 사용자의 QA 대화 내용 Data 저장
-* Alembic 활용
-    * Database 및 Table 관련 Schema 업데이트 및 관리  
-
-
-ㄴ Backend Server (FastAPI)
+ㄴ Backend Server (FastAPI) + DB (MySQL)
 -
 
 * Frontend (Reaact) 와 연동
     * Paper Metadata 및 모델 예측을 통한 TOP-10 Paper 전달
     * 사용자 Login 관련 Frontend Server와 연동 및 Authorization Token 전달
     * PRQAS 시스템 이용간 검색 및 QA 시스템 내역 연동, Database 저장
+
+* MySQL DB 활용
+    - 사용자의 Login Data, Paper Metadata, 사용자의 QA 대화 내용 Data 저장
+    * Alembic 활용
+        * Database 및 Table 관련 Schema 업데이트 및 관리  
 
 ㄴ Workflow (Airflow)
 -
