@@ -17,6 +17,8 @@ import re
 
 from pytz import timezone
 from datetime import datetime
+from collections import defaultdict
+from tqdm import tqdm
 
 from keybert import KeyBERT
 from sqlalchemy import create_engine
@@ -214,25 +216,6 @@ category_ch = {
     'stat.TH' : 'Statistics Theory'   
     }
 
-def keyword_change(str1) : 
-    kw_model = KeyBERT()
-
-    keyword = kw_model.extract_keywords(str1, 
-                                        keyphrase_ngram_range=(1, 3), 
-                                        stop_words='english', 
-                                        use_mmr=True, 
-                                        diversity=0.3,
-                                        top_n = 3)
-
-    return keyword
-
-def keyword_json(keyword) : 
-    temp = {}
-    for i, (a, b) in enumerate(keyword) : 
-        temp[i] = a
-
-    return json.dumps(temp)
-
 def category_change(str1) : 
     return category_ch[str1]
 
@@ -279,6 +262,46 @@ def get_citation_graph(data) :
 
     return result
 
+def citation_list_interval(list1, int1) : 
+
+    quote_dates = json.loads(list1)
+
+    quarterly_quotes = defaultdict(int)
+    max_quotes = 0
+
+    for date_str in quote_dates:
+        date = datetime.strptime(date_str, '%Y-%m-%d')
+
+        year_quarter = (date.year, (date.month - 1) // int1 + 1)
+        quarterly_quotes[year_quarter] += int(quote_dates.get(date_str)) - max_quotes
+        max_quotes = int(quote_dates.get(date_str))
+    
+    accumulated_quotes = defaultdict(int)
+    total_quotes = 0
+
+    start_year = min(quarterly_quotes.keys())[0]
+    start_quarter = min(quarterly_quotes.keys(), key=lambda x: (x[0], x[1]))[1]
+    end_year = max(quarterly_quotes.keys())[0]
+    end_quarter = max(quarterly_quotes.keys(), key=lambda x: (x[0], x[1]))[1]
+
+    current_year = start_year
+    current_quarter = start_quarter
+
+    while (current_year, current_quarter) <= (end_year, end_quarter):
+        total_quotes += quarterly_quotes[(current_year, current_quarter)]
+        if len(str(current_quarter)) == 1 : 
+            keys_name = f'{current_year}-0{current_quarter}'
+        else : 
+            keys_name = f'{current_year}-{current_quarter}'
+        accumulated_quotes[keys_name] = total_quotes
+
+        current_quarter += 1
+        if current_quarter > (12//int1):
+            current_year += 1
+            current_quarter = 1
+            
+    return accumulated_quotes
+
 def str_change(str1) : 
     return f'"{str1}"'
 
@@ -295,12 +318,10 @@ def get_CSV(target_date1) :
         'updated_year': [],
         'abstract': [],
         'categories' : [],
-        'journals' : [],
         'author1' : [],
     }
 
     data = get_data()
-    patterns  = r"^.+?(?=\d)"
 
     for i, paper in enumerate(data):
         paper = json.loads(paper)
@@ -309,12 +330,6 @@ def get_CSV(target_date1) :
             title = paper['title'].replace('\n ', '')
             category = paper['categories'].split(' ')[0]
             author = ' '.join(paper['authors_parsed'][0][-2::-1]).strip()
-        
-            try : 
-                journal = re.findall(patterns, paper['journal-ref'])[0]
-                journal = journal.strip()
-            except :
-                journal = None 
 
             if date == target_date :
                 dataframe['id'].append(paper['id'])
@@ -322,7 +337,6 @@ def get_CSV(target_date1) :
                 dataframe['updated_year'].append(int(date[:4])) 
                 dataframe['abstract'].append(paper['abstract'])
                 dataframe['categories'].append(category_change(category)) 
-                dataframe['journals'].append(journal)
                 dataframe['author1'].append(author) 
                     
         except: pass
@@ -341,33 +355,7 @@ def get_CSV(target_date1) :
 
     show_time('CSV DONE!!!')
 ################################
-
-################################
-def get_keyword(target_date1) : 
-
-    show_time('KEYWORD START!!!')
-
-    target_date = target_date_convert(target_date1)
-
-
-    df_name = f'/home/dohyun/Final_P/csv_files/databases_{target_date}.csv'
-    df = pd.read_csv(df_name)
-    print(df_name)
-
-    df['keyword'] = keyword_change(df['abstract']) 
-    df['keyword'] = df['keyword'].apply(keyword_json)
-
-    df = df.drop(['abstract'], axis = 1)
-    print(df.columns)
-    print(len(df))
-
-    df.to_csv(df_name, header = True, index = False )
-
-    del df
-
-    show_time('KEYWORD DONE!!!')
-################################
-    
+  
 ################################
 def get_citation_reference(target_date1, semantic_api_key) : 
 
@@ -376,12 +364,12 @@ def get_citation_reference(target_date1, semantic_api_key) :
     target_date = target_date_convert(target_date1)
     df_name = f'/home/dohyun/Final_P/csv_files/databases_{target_date}.csv'
 
-    index_list = [] # citationCount X 인 index => drop
+    index_list = []
 
     df = pd.read_csv(df_name)
     print(df_name)
 
-    for i in range(0, len(df), 500) : # api => 1초에 1번 request, 1번에 500개 처리 
+    for i in range(0, len(df), 500) :
         df1 = df[i: i+500]
 
         df1_id_list = list(df1['id'].apply(id_list)) # 
@@ -401,19 +389,24 @@ def get_citation_reference(target_date1, semantic_api_key) :
                 index_list.append(i+j)
 
         print(f'Wait! {i+500}th data Done!')
-        os.system('sleep 3') # 강제로 3초 휴식 
+        os.system('sleep 3')
 
     df = df.drop(index_list)
     df = df.dropna(subset=['citation_count'], how='any', axis=0)
     df = df.dropna(subset=['reference_count'], how='any', axis=0)
     df = df.dropna(subset=['published_year'], how='any', axis=0)
-    len_of_graph = len(df[df['citation_graph'] != '{}'])
-    len_of_df = len(df)
+
+    print(f'Before Length of DF : {len(df)}')
+
+    condition = df['citation_graph'] == '{}'
+
+    print(f'No citation data : {condition.sum()}')
+
+    df.drop(df[condition].index, inplace=True)
+
+    print(f'After Length of DF : {len(df)}')
 
     print(df.columns)
-
-    print(f'Length of DF : {len_of_df}')
-    print(f'length of Graph : {len_of_graph}')
 
     df.to_csv(df_name, header = True, index = False )
 
@@ -441,21 +434,18 @@ def import_dataset(target_date1, sql_user, sql_password, sql_port) :
         charset = 'utf8'
     )
 
-    table_name = 'PaperInfo_practice'
+    table_name = 'PaperInfo'
 
     table_sql = f'SELECT id FROM {table_name};'
     table_id = pd.read_sql(table_sql, db)
     
-    cursor = db.cursor() # db 연결 후 cursor 객체를 통한 상호작용 
+    cursor = db.cursor()
 
     file_path = f'/home/dohyun/Final_P/csv_files/databases_{target_date}.csv'
     data = pd.read_csv(file_path)
     print(file_path)
     
     data.drop_duplicates(inplace = True)
-    data = data.dropna(subset=['citation_count'], how='any', axis=0)
-    data = data.dropna(subset=['reference_count'], how='any', axis=0)
-    data = data.dropna(subset=['published_year'], how='any', axis=0)
 
     data_id = pd.DataFrame(data['id'])
 
@@ -476,6 +466,7 @@ def import_dataset(target_date1, sql_user, sql_password, sql_port) :
         
         show_time('Duplicated Database Done!!!')
 
+    print(len(data))
 
     data.to_sql(table_name, con = conn, if_exists='append', index=False)
     
@@ -485,6 +476,8 @@ def import_dataset(target_date1, sql_user, sql_password, sql_port) :
 
     conn.close()
     db.close()
+
+    os.remove(file_path)
 
     show_time('IMPORT DONE!!!')
 ################################

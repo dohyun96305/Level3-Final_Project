@@ -18,19 +18,16 @@ SECRET_KEY = '197b2c37c391bed93fe80344fe73b806947a65e36206e05a1a23c2fa12702fe3'
 ALGORITHM = 'HS256'
 
 bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
-oauth2_bearer = OAuth2PasswordBearer(tokenUrl='/login')
-
+oauth2_bearer = OAuth2PasswordBearer(tokenUrl='/api/login/login')
 
 class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str
     username: str
 
-
 class Token(BaseModel):
     access_token: str
     token_type: str
-
 
 def get_db():
     db = SessionLocal()
@@ -39,9 +36,7 @@ def get_db():
     finally:
         db.close()
 
-
 db_dependency = Annotated[Session, Depends(get_db)]
-
 
 def authenticate_user(email: str, password: str, db):
     user = db.query(Users).filter(Users.email == email).first()
@@ -51,13 +46,11 @@ def authenticate_user(email: str, password: str, db):
         return False
     return user
 
-
 def create_access_token(email:str, user_id: int, expires_delta: timedelta):
     encode = {'sub': email, 'id': user_id}
     expires = datetime.utcnow() + expires_delta
     encode.update({'exp': expires})
     return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
-
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
     try:
@@ -72,7 +65,6 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail='Could not validate user.')
 
-
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def create_user(db: db_dependency,
                       create_user_request: CreateUserRequest):
@@ -85,7 +77,6 @@ async def create_user(db: db_dependency,
     db.add(create_user_model)
     db.commit()
 
-
 @router.post("/login", response_model=Token)
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
                                  db: db_dependency):
@@ -93,7 +84,7 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail='Could not validate user.')
-    token = create_access_token(user.email, user.user_id, timedelta(minutes=20))
+    token = create_access_token(user.email, user.user_id, timedelta(days=1))
 
     return {'access_token': token, 'token_type': 'bearer'}
 

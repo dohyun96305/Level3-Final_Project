@@ -6,6 +6,7 @@
 *.cfg
 *.db
 *.out
+*.pth
 
 # dir
 Ignore_to_Push/
@@ -19,5 +20,5 @@ webserver_config.py
 Airflow/dags/practice.py
 
 # Backend
-myapi/migrations
+FastAPI/migrations
 alembic.ini
