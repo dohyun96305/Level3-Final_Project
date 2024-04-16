@@ -8,7 +8,7 @@ from airflow.operators.python import PythonOperator
 
 import os
 import sys
-sys.path.append(os.path.abspath('../'))
+sys.path.append(os.path.abspath('/home/dohyun/Final_P/'))
 
 from utils.databases_import import get_CSV, import_dataset, get_citation_reference
 from utils.paper_models_train import model_train_save
@@ -31,7 +31,7 @@ sql_port = Variable.get("sql_port")
 with DAG(
     dag_id = 'Import_Dataset_SQL',
     description = 'Import SQL with Target_date',
-    start_date = datetime(2010, 1, 1),
+    start_date = datetime(2020, 1, 1),
     schedule_interval = '@monthly',
     default_args = default_args,
     tags = ['my_dags'],

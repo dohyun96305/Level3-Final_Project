@@ -48,9 +48,12 @@ async def determine_chat(user: user_dependency, db: db_dependency, paper_id: str
     Chat_model = db.query(Chat).filter(Chat.user_id == user.get('id')).filter(Chat.paper_id == paper_id).first()
 
     if Chat_model:
-        return db.query(Message).filter(Chat_model.chat_id == Message.chat_id).order_by(asc(Message.time)).all()
+        print(Chat_model.chat_id)
+        print(db.query(Message).filter(Message.chat_id == Chat_model.chat_id).order_by(asc(Message.time)).all())
+        return db.query(Message).filter(Message.chat_id == Chat_model.chat_id).order_by(asc(Message.time)).all()
     else:
         return False
+
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_chat(user: user_dependency, db: db_dependency,
@@ -66,7 +69,7 @@ async def create_chat(user: user_dependency, db: db_dependency,
         paper_title_model = db.query(PaperInfo).filter(PaperInfo.id == chat_request.paper_id)
 
         chat_model = Chat(paper_id = chat_request.paper_id, user_id=user.get('id'), paper_title = paper_title_model[0].title)
-
+    
         db.add(chat_model)
         db.commit()
 
@@ -90,8 +93,11 @@ async def delete_chat(user: user_dependency, db: db_dependency,
         raise HTTPException(status_code=401, detail='Authentication Failed')
     
     Chat_model = db.query(Chat).filter(Chat.user_id == user.get('id')).filter(Chat.paper_id == paper_id).first()
+    
     if Chat_model is not None:
         db.query(Message).filter(Message.chat_id == Chat_model.chat_id).delete()
+        db.query(Chat).filter(Chat.chat_id == Chat_model.chat_id).delete()
+
         db.delete(Chat_model)
         db.commit()
     else:
